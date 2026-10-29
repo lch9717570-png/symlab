@@ -1,0 +1,937 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}</style></head><body><title>선대칭 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* 레이아웃: 위쪽 탭(거울·접기 실험실·성질 탐정) + 화면 가득한 작업 무대. 카메라와 도형이 잘 보이도록 어두운 무대 한 가지 테마로 고정. */
+:root{
+  --stage:#14161d;  --panel:#1f2330; --panel2:#272c3c; --line:#343a4d;
+  --ink:#eef1f8;    --muted:#9aa3b8;
+  --axis:#ffd23f;   /* 대칭축·접는 선 */
+  --pick:#5ad1b0;   /* 선택, 성공 */
+  --paper:#8fb8ff;  /* 도형 앞면 */
+  --paper2:#4f6fb3; /* 접힌 뒷면 */
+  --miss:#ff5c6c;   /* 삐져나온 부분, 다름 */
+  --font-display:"Jua","Gowun Dodum",system-ui,sans-serif;
+  --font-body:"Gowun Dodum",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--stage);color:var(--ink);font-family:var(--font-body);font-size:16px;margin:0;
+  display:flex;flex-direction:column;box-sizing:border-box;gap:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px}
+*,*::before,*::after{box-sizing:border-box}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--font-display);font-weight:400;font-size:1.5rem;margin:0;letter-spacing:.02em;user-select:none;cursor:default}
+h1 small{font-family:var(--font-body);font-size:.8rem;color:var(--muted);margin-left:.4em;letter-spacing:0}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.tab{font-family:var(--font-display);font-size:1.05rem}
+.tab .lock{font-family:var(--font-body);font-size:.75rem;color:var(--muted);margin-left:.35em}
+.tab[aria-selected="true"]{background:var(--axis);border-color:var(--axis);color:#2b2200}
+.tab[aria-selected="true"] .lock{color:#5a4a00}
+main{flex:1;min-height:0;display:flex}
+section.page{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;gap:10px}
+section.page[hidden]{display:none!important}
+button,.filebtn{font-family:var(--font-body);font-size:1rem;color:var(--ink);background:transparent;border:1.5px solid var(--line);
+  border-radius:999px;padding:.5em 1em;cursor:pointer;min-height:44px;line-height:1.2}
+button:hover:not(:disabled),.filebtn:hover{border-color:var(--muted)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,.filebtn:focus-within,input:focus-visible{outline:3px solid var(--axis);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--pick);border-color:var(--pick);color:#0d1f1a;font-weight:700}
+button.primary{background:var(--axis);border-color:var(--axis);color:#2b2200;font-weight:700}
+button.big{font-size:1.25rem;min-width:88px;font-family:var(--font-display)}
+.filebtn{display:inline-flex;align-items:center;position:relative}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.spacer{flex:1}
+.muted{color:var(--muted)}
+.say{font-family:var(--font-display);font-size:1.25rem;line-height:1.4;margin:0;text-wrap:balance}
+.msg{min-height:1.4em;font-size:1rem;line-height:1.5}
+.msg.good{color:var(--pick)} .msg.bad{color:var(--miss)} .msg.warn{color:var(--axis)}
+.step-label{font-family:var(--font-display);font-size:1rem;color:var(--axis)}
+canvas{display:block;touch-action:none}
+
+/* ---------- 거울 ---------- */
+.stage{flex:1;min-height:0;display:flex;overflow:hidden}
+.views{flex:1;display:flex;gap:12px;align-items:stretch;justify-content:center;min-height:0;min-width:0}
+.view{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:0}
+.view canvas{max-width:100%;max-height:calc(100% - 32px);width:auto;height:auto;border-radius:14px;background:#000}
+.tag{font-family:var(--font-display);font-size:1.1rem}
+.tag.hidden-name{color:var(--muted)}
+.axisrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.axisrow label{font-family:var(--font-display)}
+input[type=range]{flex:1;min-width:140px;accent-color:var(--axis);height:32px}
+.status{font-size:.9rem;color:var(--muted)}
+.status.warn{color:var(--axis)}
+
+/* ---------- 작업 화면(접기·탐정) 공통 배치 ---------- */
+.work{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px}
+.board{background:var(--panel);border:1px solid var(--line);border-radius:16px;display:flex;align-items:center;justify-content:center;min-height:0;min-width:0;padding:8px;position:relative}
+.board canvas{width:100%;height:100%;max-width:100%;max-height:100%;aspect-ratio:1/1;object-fit:contain}
+.side{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;overflow:auto}
+@media (max-width:760px){
+  .work{grid-template-columns:1fr;grid-template-rows:auto auto}
+  .board canvas{height:auto;max-height:52vh}
+  .views.three{flex-direction:column}
+  h1{font-size:1.25rem}
+  nav{margin-left:0}
+}
+
+/* 도형 진행 칩 */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{min-height:40px;min-width:44px;padding:.35em .7em;font-family:var(--font-display);font-size:1rem;border-radius:12px}
+.chip.done-yes{border-color:var(--pick);color:var(--pick)}
+.chip.done-no{border-color:var(--miss);color:var(--miss)}
+.chip[aria-current="true"]{background:var(--panel2);border-color:var(--axis)}
+.linebtns{display:flex;gap:6px;flex-wrap:wrap}
+.linebtn.tried-yes{border-color:var(--pick);color:var(--pick)}
+.linebtn.tried-no{border-color:var(--miss);color:var(--miss)}
+
+/* 분류 보드 */
+.sort{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bin{background:var(--panel2);border-radius:12px;padding:10px;min-height:120px}
+.bin h3{font-family:var(--font-display);font-weight:400;font-size:1.05rem;margin:0 0 8px}
+.bin .items{display:flex;flex-wrap:wrap;gap:8px}
+.mini{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.85rem}
+.mini canvas{width:72px;height:72px;background:var(--stage);border-radius:10px}
+.mini .flag{color:var(--axis);font-size:.78rem}
+
+/* 탐정 */
+.kind{display:flex;gap:6px;flex-wrap:wrap}
+table.meas{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+table.meas th,table.meas td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:center;font-size:.95rem}
+table.meas th{color:var(--muted);font-weight:400}
+table.meas td.same{color:var(--pick)}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:14px;border:1.5px solid var(--line);background:var(--panel2);cursor:pointer;min-height:0}
+.card canvas{width:100%;height:auto;aspect-ratio:1/1;background:var(--stage);border-radius:10px}
+.card[aria-pressed="true"]{border-color:var(--axis)}
+.card .name{font-family:var(--font-display)}
+.stmts{display:flex;flex-direction:column;gap:6px}
+.stmt{text-align:left;border-radius:12px}
+.stmt[aria-pressed="true"]{background:var(--pick);color:#0d1f1a}
+.progress{font-family:var(--font-display);color:var(--muted)}
+#cardBox.fresh{animation:fresh 1.2s ease-out}
+@keyframes fresh{0%{box-shadow:0 0 0 0 var(--axis);border-color:var(--axis)}100%{box-shadow:0 0 0 14px rgba(255,210,63,0);border-color:var(--line)}}
+
+/* 덮개(짝 대화, 잠금) */
+.overlay{position:fixed;inset:0;background:rgba(10,11,16,.82);display:flex;align-items:center;justify-content:center;z-index:20;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.overlay[hidden]{display:none!important}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:24px;max-width:520px;width:100%;display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.sheet .talk-badge{font-family:var(--font-display);color:#2b2200;background:var(--axis);border-radius:999px;padding:.2em .8em}
+.sheet input{font-size:1.4rem;padding:.4em .6em;border-radius:12px;border:1.5px solid var(--line);background:var(--stage);color:var(--ink);width:8em;letter-spacing:.2em;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header>
+  <h1 id="title">선대칭 실험실 <small>5학년 3. 합동과 대칭</small></h1>
+  <nav role="tablist" aria-label="활동 화면">
+    <button class="tab" role="tab" id="tab-mirror" aria-selected="true" data-page="mirror">① 선대칭 거울</button>
+    <button class="tab" role="tab" id="tab-fold" aria-selected="false" data-page="fold">② 접기 실험실<span class="lock">잠김</span></button>
+    <button class="tab" role="tab" id="tab-detect" aria-selected="false" data-page="detect">③ 성질 탐정<span class="lock">잠김</span></button>
+  </nav>
+</header>
+
+<main>
+<!-- ================= ① 선대칭 거울 ================= -->
+<section class="page" id="page-mirror">
+  <div class="stage">
+    <div class="views one" id="views">
+      <div class="view"><canvas id="c0" width="960" height="720" aria-label="대칭 화면"></canvas><span class="tag" id="t0"></span></div>
+      <div class="view" id="v1" hidden><canvas id="c1" width="960" height="720"></canvas><span class="tag" id="t1"></span></div>
+      <div class="view" id="v2" hidden><canvas id="c2" width="960" height="720"></canvas><span class="tag" id="t2"></span></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="row">
+      <div class="row" role="group" aria-label="보기 방식">
+        <button data-mode="orig">원래 모습</button>
+        <button data-mode="left">왼쪽으로 만든 대칭</button>
+        <button data-mode="right">오른쪽으로 만든 대칭</button>
+        <button data-mode="fold">접어서 겹쳐 보기</button>
+        <button data-mode="three">세 장 비교</button>
+      </div>
+      <span class="spacer"></span>
+      <button id="hideNames" hidden>이름 보이기</button>
+    </div>
+    <div class="axisrow">
+      <label for="axis">대칭축</label>
+      <input type="range" id="axis" min="20" max="80" value="50" step="0.5">
+      <button id="center">가운데로</button>
+    </div>
+    <div class="row">
+      <button class="primary" id="startCam">카메라 켜기</button>
+      <button id="flipCam" hidden>앞·뒤 카메라 바꾸기</button>
+      <button id="pauseCam" hidden>멈추기</button>
+      <label class="filebtn">사진 찍어서 하기<input type="file" id="photo" accept="image/*" capture="user"></label>
+      <button id="demo">예시 얼굴</button>
+      <span class="status" id="status">예시 얼굴로 시작해요. 영상과 사진은 이 기기 화면에만 보이고 저장되지 않아요.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ② 접기 실험실 ================= -->
+<section class="page" id="page-fold" hidden>
+  <div class="work">
+    <div class="board"><canvas id="foldCanvas" width="800" height="800" aria-label="접기 실험 도형"></canvas></div>
+    <div class="side">
+      <div class="panel">
+        <div class="row"><span class="step-label">도형</span><div class="chips" id="foldChips"></div></div>
+        <p class="say" id="foldQ">도형 가: 하트</p>
+      </div>
+      <div class="panel" id="predictBox">
+        <span class="step-label">1. 예상하기</span>
+        <p class="say">한 직선을 따라 접으면 완전히 겹칠까요?</p>
+        <div class="row">
+          <button class="big" id="predYes">O 겹친다</button>
+          <button class="big" id="predNo">X 안 겹친다</button>
+        </div>
+      </div>
+      <div class="panel" id="tryBox" hidden>
+        <span class="step-label">2. 접어 보기</span>
+        <p class="muted" style="margin:0">접는 선을 골라 누르세요. 여러 선으로 접어 봐도 돼요.</p>
+        <div class="linebtns" id="lineBtns"></div>
+        <p class="msg" id="foldMsg"></p>
+        <div class="row"><span class="spacer"></span><button class="primary" id="nextShape" disabled>다음 도형</button></div>
+      </div>
+      <div class="panel" id="sortBox" hidden>
+        <span class="step-label">3. 나누어 보기</span>
+        <div class="sort">
+          <div class="bin"><h3>완전히 겹치는 도형</h3><div class="items" id="binYes"></div></div>
+          <div class="bin"><h3>겹치지 않는 도형</h3><div class="items" id="binNo"></div></div>
+        </div>
+        <p class="muted" style="margin:0">노란 글씨는 내 예상과 결과가 달랐던 도형이에요.</p>
+        <div class="row"><button id="foldAgain">처음부터 다시</button><span class="spacer"></span><button class="primary" id="foldTalk">짝과 이야기하기</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ③ 성질 탐정 ================= -->
+<section class="page" id="page-detect" hidden>
+  <div class="work">
+    <div class="board"><canvas id="detCanvas" width="800" height="800" aria-label="성질 탐정 도형"></canvas></div>
+    <div class="side">
+      <div class="panel">
+        <div class="row"><span class="step-label" id="detStep">1단계 · 짝 찾기</span><span class="spacer"></span><span class="progress" id="detProg"></span></div>
+        <p class="say" id="detQ"></p>
+        <div class="kind" id="detKind"></div>
+        <p class="msg" id="detMsg"></p>
+        <div class="row" id="detActions"></div>
+      </div>
+      <div class="panel" id="measBox" hidden>
+        <table class="meas" id="measTable" aria-label="재어 본 값"></table>
+      </div>
+      <div class="panel" id="stmtBox" hidden>
+        <span class="step-label">선대칭도형에는 어떤 성질이 있을까요? 맞는 것을 모두 고르세요.</span>
+        <div class="stmts" id="stmts"></div>
+        <div class="row"><span class="spacer"></span><button class="primary" id="stmtCheck">확인하기</button></div>
+      </div>
+      <div class="panel" id="cardBox" hidden>
+        <div class="cards" id="cards"></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- 짝과 이야기 -->
+<div class="overlay" id="talk" hidden role="dialog" aria-modal="true" aria-labelledby="talkText">
+  <div class="sheet">
+    <span class="talk-badge" id="talkBadge">짝과 이야기해요</span>
+    <p class="say" id="talkText"></p>
+    <p class="muted" id="talkSub" style="margin:0"></p>
+    <button class="primary" id="talkDone">이야기 다 했어요</button>
+  </div>
+</div>
+<!-- 잠금 -->
+<div class="overlay" id="lockBox" hidden role="dialog" aria-modal="true" aria-labelledby="lockText">
+  <div class="sheet">
+    <p class="say" id="lockText">선생님이 알려 주는 암호를 넣어 주세요.</p>
+    <input id="lockInput" inputmode="numeric" autocomplete="off" maxlength="4" aria-label="암호">
+    <p class="msg bad" id="lockMsg"></p>
+    <div class="row"><button id="lockCancel">닫기</button><button class="primary" id="lockOk">열기</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { axis: css('--axis') || '#ffd23f', pick: css('--pick') || '#5ad1b0', paper: css('--paper') || '#8fb8ff',
+  paper2: css('--paper2') || '#4f6fb3', miss: css('--miss') || '#ff5c6c', ink: css('--ink') || '#eef1f8',
+  muted: css('--muted') || '#9aa3b8', stage: css('--stage') || '#14161d', panel2: css('--panel2') || '#272c3c' };
+const PAIR_COLORS = ['#ff9f43', '#5ad1b0', '#c792ea', '#4fc3f7', '#ff6b9d', '#c3e88d', '#ffd23f'];
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem('symlab:' + k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('symlab:' + k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* ================= 탭과 잠금 ================= */
+const CODES = { fold: '21', detect: '63' };
+const CHECKS = { foldMid: { code: '34', text: '선생님 신호를 기다려요. 평행사변형 이야기를 함께 나눠요.' }, detMid: { code: '85', text: '선생님 신호를 기다려요. 찾은 성질을 함께 정리해요.' } };
+const passed = Object.assign({}, store.get('passed') || {});
+let pendingCheck = null;
+function checkpoint(id, after) {
+  if (passed[id] || unlocked.all) { after(); return; }
+  pendingCheck = { id, after }; pendingTab = null; $('lockText').textContent = CHECKS[id].text; $('lockInput').value = ''; $('lockMsg').textContent = ''; $('lockCancel').hidden = true; $('lockBox').hidden = false; setTimeout(() => $('lockInput').focus(), 50);
+}
+const unlocked = Object.assign({ mirror: true, fold: false, detect: false }, store.get('unlocked') || {});
+let current = 'mirror', pendingTab = null;
+function refreshTabs() {
+  document.querySelectorAll('.tab').forEach(t => {
+    const p = t.dataset.page; t.setAttribute('aria-selected', String(p === current));
+    const lk = t.querySelector('.lock'); if (lk) lk.hidden = !!unlocked[p];
+  });
+  ['mirror', 'fold', 'detect'].forEach(p => { $('page-' + p).hidden = p !== current; });
+  mirror.setActive(current === 'mirror');
+}
+function goTab(p) {
+  if (!unlocked[p]) { pendingTab = p; pendingCheck = null; $('lockText').textContent = '선생님이 알려 주는 암호를 넣어 주세요.'; $('lockCancel').hidden = false; $('lockInput').value = ''; $('lockMsg').textContent = ''; $('lockBox').hidden = false; setTimeout(() => $('lockInput').focus(), 50); return; }
+  current = p; refreshTabs();
+  if (p === 'fold') fold.draw(); if (p === 'detect') det.draw();
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => goTab(t.dataset.page)));
+function tryUnlock() {
+  const v = $('lockInput').value.trim();
+  if (pendingCheck) {
+    if (v === CHECKS[pendingCheck.id].code) { passed[pendingCheck.id] = true; store.set('passed', passed); $('lockBox').hidden = true; const f = pendingCheck.after; pendingCheck = null; f(); }
+    else $('lockMsg').textContent = '암호가 달라요. 선생님 신호를 기다려 주세요.';
+    return;
+  }
+  if (v === CODES[pendingTab]) { unlocked[pendingTab] = true; store.set('unlocked', unlocked); $('lockBox').hidden = true; goTab(pendingTab); }
+  else { $('lockMsg').textContent = '암호가 달라요. 선생님 신호를 기다려 주세요.'; }
+}
+$('lockOk').addEventListener('click', tryUnlock);
+$('lockInput').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+$('lockCancel').addEventListener('click', () => { $('lockBox').hidden = true; });
+// 선생님용: 제목을 빠르게 세 번 누르면 모든 화면이 열림
+let taps = [];
+$('title').addEventListener('click', () => {
+  const now = Date.now(); taps = taps.filter(t => now - t < 900); taps.push(now);
+  if (taps.length >= 3) { unlocked.fold = unlocked.detect = unlocked.all = true; store.set('unlocked', unlocked); refreshTabs(); taps = []; }
+});
+
+/* ================= 짝과 이야기 ================= */
+let talkAfter = null;
+function talk(text, sub, after, badge) {
+  $('talkBadge').textContent = badge || '짝과 이야기해요';
+  $('talkText').textContent = text; $('talkSub').textContent = sub || ''; talkAfter = after || null;
+  $('talk').hidden = false; setTimeout(() => $('talkDone').focus(), 50);
+}
+function sheet(no, text, after) { talk(text, '다 쓴 다음 아래 단추를 누르세요.', after, '활동지 ' + no + '번'); $('talkDone').textContent = '다 썼어요'; }
+$('talkDone').addEventListener('click', () => { $('talkDone').textContent = '이야기 다 했어요'; });
+$('talkDone').addEventListener('click', () => { $('talk').hidden = true; const f = talkAfter; talkAfter = null; if (f) f(); });
+
+/* ================= 기하 도우미 ================= */
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+const len = v => Math.hypot(v.x, v.y);
+const P = (x, y) => ({ x, y });
+function lineFrame(p, q) { const d = sub(q, p), L = len(d); const u = { x: d.x / L, y: d.y / L }; return { p, u, n: { x: -u.y, y: u.x } }; }
+// 접는 선 기준 변환: c=1 원래, c=-1 완전히 접힘(반사)
+function foldMatrix(fr, c) {
+  const { u, n, p } = fr;
+  const a = u.x * u.x + c * n.x * n.x, b = u.x * u.y + c * n.x * n.y, d = u.y * u.y + c * n.y * n.y;
+  return [a, b, b, d, p.x - (a * p.x + b * p.y), p.y - (b * p.x + d * p.y)];
+}
+function halfPlanePath(g, fr, side) { // side=+1: n 방향 쪽
+  const { p, u, n } = fr, B = 4000;
+  g.beginPath();
+  g.moveTo(p.x - u.x * B, p.y - u.y * B); g.lineTo(p.x + u.x * B, p.y + u.y * B);
+  g.lineTo(p.x + u.x * B + side * n.x * B, p.y + u.y * B + side * n.y * B);
+  g.lineTo(p.x - u.x * B + side * n.x * B, p.y - u.y * B + side * n.y * B); g.closePath();
+}
+function polyPath(g, pts) { g.beginPath(); pts.forEach((v, i) => i ? g.lineTo(v.x, v.y) : g.moveTo(v.x, v.y)); g.closePath(); }
+// 접었을 때 어긋나는 넓이의 비율(0이면 완전히 겹침)
+function foldMismatch(pts, fr) {
+  const S = 200, k = S / 400, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  const count = () => { const d = g.getImageData(0, 0, S, S).data; let c = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 128) c++; return c; };
+  g.setTransform(k, 0, 0, k, 0, 0); g.save(); halfPlanePath(g, fr, 1); g.clip(); g.fillStyle = '#000'; polyPath(g, pts); g.fill(); g.restore();
+  const base = count();
+  g.save(); halfPlanePath(g, fr, 1); g.clip(); g.globalCompositeOperation = 'xor';
+  const m = foldMatrix(fr, -1); g.transform(...m); polyPath(g, pts); g.fill(); g.restore();
+  return base ? count() / base : 1;
+}
+function canvasPoint(cv, e, logical) {
+  const r = cv.getBoundingClientRect();
+  // object-fit:contain 을 고려해 실제 그림 영역 계산
+  const s = Math.min(r.width, r.height), ox = r.left + (r.width - s) / 2, oy = r.top + (r.height - s) / 2;
+  return { x: (e.clientX - ox) / s * logical, y: (e.clientY - oy) / s * logical };
+}
+function distSeg(pt, a, b) {
+  const ab = sub(b, a), t = Math.max(0, Math.min(1, ((pt.x - a.x) * ab.x + (pt.y - a.y) * ab.y) / (ab.x * ab.x + ab.y * ab.y)));
+  return Math.hypot(pt.x - (a.x + ab.x * t), pt.y - (a.y + ab.y * t));
+}
+function inPoly(pt, pts) {
+  let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) c = !c;
+  } return c;
+}
+function angleAt(pts, i) {
+  const n = pts.length, a = pts[(i - 1 + n) % n], v = pts[i], b = pts[(i + 1) % n];
+  const p = sub(a, v), q = sub(b, v);
+  return Math.acos(Math.max(-1, Math.min(1, (p.x * q.x + p.y * q.y) / (len(p) * len(q))))) * 180 / Math.PI;
+}
+function easeInOut(t) { return t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ================= ① 선대칭 거울 ================= */
+const mirror = (() => {
+  const canvases = [$('c0'), $('c1'), $('c2')], tags = [$('t0'), $('t1'), $('t2')];
+  const video = document.createElement('video'); video.playsInline = true; video.muted = true; video.autoplay = true;
+  const src = document.createElement('canvas'), sctx = src.getContext('2d');
+  let mode = 'left', axis = .5, stream = null, facing = 'user', paused = false, source = 'demo', still = null;
+  let namesHidden = true, order = ['left', 'orig', 'right'], active = true, raf = 0;
+  const NAMES = { orig: '원래 모습', left: '왼쪽으로 만든 대칭', right: '오른쪽으로 만든 대칭', fold: '접어서 겹쳐 보기' };
+  const status = (t, w) => { $('status').textContent = t; $('status').classList.toggle('warn', !!w); };
+  function drawDemo(w, h) {
+    src.width = w; src.height = h; const g = sctx;
+    g.fillStyle = '#7ec8e3'; g.fillRect(0, 0, w, h); g.fillStyle = '#5aa9c9'; g.fillRect(0, h * .78, w, h * .22);
+    g.fillStyle = '#3b2a20'; g.beginPath(); g.ellipse(w * .5, h * .42, w * .25, h * .36, 0, 0, Math.PI * 2); g.fill(); g.fillRect(w * .53, h * .35, w * .21, h * .33);
+    g.fillStyle = '#f6c9a5'; g.beginPath(); g.ellipse(w * .5, h * .5, w * .19, h * .3, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#3b2a20'; g.beginPath(); g.moveTo(w * .31, h * .36); g.quadraticCurveTo(w * .42, h * .16, w * .66, h * .3); g.quadraticCurveTo(w * .5, h * .26, w * .31, h * .44); g.fill();
+    g.strokeStyle = '#3b2a20'; g.lineWidth = w * .012; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(w * .38, h * .41); g.lineTo(w * .46, h * .40); g.stroke();
+    g.beginPath(); g.moveTo(w * .54, h * .37); g.lineTo(w * .62, h * .35); g.stroke();
+    g.fillStyle = '#2a2a2a'; g.beginPath(); g.moveTo(w * .385, h * .465); g.quadraticCurveTo(w * .42, h * .44, w * .455, h * .465); g.stroke();
+    g.beginPath(); g.ellipse(w * .58, h * .46, w * .022, h * .03, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#d99a78'; g.beginPath(); g.moveTo(w * .505, h * .5); g.lineTo(w * .49, h * .57); g.lineTo(w * .515, h * .575); g.stroke();
+    g.strokeStyle = '#b5475a'; g.lineWidth = w * .014; g.beginPath(); g.moveTo(w * .43, h * .64); g.quadraticCurveTo(w * .5, h * .68, w * .58, h * .6); g.stroke();
+    g.fillStyle = '#7a4a35'; g.beginPath(); g.arc(w * .6, h * .58, w * .006, 0, Math.PI * 2); g.fill();
+  }
+  function updateSource() {
+    if (source === 'camera') {
+      if (!video.videoWidth) return; const w = video.videoWidth, h = video.videoHeight;
+      if (src.width !== w || src.height !== h) { src.width = w; src.height = h; }
+      sctx.save(); if (facing === 'user') { sctx.translate(w, 0); sctx.scale(-1, 1); } sctx.drawImage(video, 0, 0, w, h); sctx.restore();
+    } else if (source === 'photo' && still) {
+      const w = still.naturalWidth, h = still.naturalHeight, s = Math.min(1, 1280 / Math.max(w, h));
+      src.width = Math.round(w * s); src.height = Math.round(h * s); sctx.drawImage(still, 0, 0, src.width, src.height);
+    }
+  }
+  function render(cv, m, showAxis) {
+    const W = src.width, H = src.height; if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const g = cv.getContext('2d'), a = axis * W; g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const flipped = (x, w, al) => { g.save(); g.beginPath(); g.rect(x, 0, w, H); g.clip(); g.globalAlpha = al; g.translate(2 * a, 0); g.scale(-1, 1); g.drawImage(src, 0, 0, W, H); g.restore(); };
+    const plain = (x, w) => { g.save(); g.beginPath(); g.rect(x, 0, w, H); g.clip(); g.drawImage(src, 0, 0, W, H); g.restore(); };
+    if (m === 'orig') g.drawImage(src, 0, 0, W, H);
+    else if (m === 'left') { plain(0, a); flipped(a, W - a, 1); }
+    else if (m === 'right') { plain(a, W - a); flipped(0, a, 1); }
+    else if (m === 'fold') { plain(0, a); flipped(0, a, .5); g.fillStyle = 'rgba(20,22,29,.75)'; g.fillRect(a, 0, W - a, H); }
+    if (showAxis && m !== 'orig') {
+      g.save(); g.strokeStyle = C.axis; g.lineWidth = Math.max(3, W / 200); g.setLineDash([W / 40, W / 60]);
+      g.beginPath(); g.moveTo(a, 0); g.lineTo(a, H); g.stroke(); g.setLineDash([]); g.fillStyle = C.axis;
+      g.beginPath(); g.arc(a, H - W / 30, W / 45, 0, Math.PI * 2); g.fill(); g.restore();
+    }
+  }
+  function frame() {
+    raf = 0; if (!active) return;
+    if (!paused) updateSource();
+    if (mode === 'three') order.forEach((m, i) => { render(canvases[i], m, false); tags[i].textContent = namesHidden ? ['가', '나', '다'][i] : NAMES[m]; tags[i].classList.toggle('hidden-name', namesHidden); });
+    else { render(canvases[0], mode, true); tags[0].textContent = NAMES[mode]; }
+    raf = requestAnimationFrame(frame);
+  }
+  const modeBtns = document.querySelectorAll('[data-mode]');
+  function setMode(m) {
+    mode = m; modeBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    const three = m === 'three'; $('views').className = 'views ' + (three ? 'three' : 'one');
+    $('v1').hidden = $('v2').hidden = !three; $('hideNames').hidden = !three;
+    if (three) { order = ['left', 'orig', 'right'].sort(() => Math.random() - .5); namesHidden = true; $('hideNames').textContent = '이름 보이기'; }
+  }
+  modeBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  $('hideNames').addEventListener('click', () => { namesHidden = !namesHidden; $('hideNames').textContent = namesHidden ? '이름 보이기' : '이름 가리기'; });
+  const ax = $('axis'); ax.addEventListener('input', () => { axis = ax.value / 100; });
+  $('center').addEventListener('click', () => { axis = .5; ax.value = 50; });
+  let drag = false; const c0 = canvases[0];
+  const moveAxis = e => { const r = c0.getBoundingClientRect(); const v = Math.min(80, Math.max(20, (e.clientX - r.left) / r.width * 100)); axis = v / 100; ax.value = v; };
+  c0.addEventListener('pointerdown', e => { if (mode === 'orig' || mode === 'three') return; drag = true; c0.setPointerCapture(e.pointerId); moveAxis(e); });
+  c0.addEventListener('pointermove', e => { if (drag) moveAxis(e); });
+  c0.addEventListener('pointerup', () => drag = false); c0.addEventListener('pointercancel', () => drag = false);
+  const stop = () => { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } };
+  async function startCam() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { status('이 화면에서는 카메라를 바로 쓸 수 없어요. "사진 찍어서 하기"를 눌러 주세요.', true); return; }
+    try {
+      stop(); stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      video.srcObject = stream; await video.play(); source = 'camera'; paused = false;
+      $('flipCam').hidden = $('pauseCam').hidden = false; $('pauseCam').textContent = '멈추기'; $('startCam').textContent = '카메라 다시 켜기';
+      status(facing === 'user' ? '앞 카메라: 거울처럼 보여요. 얼굴 가운데에 노란 점선을 맞춰 보세요.' : '뒤 카메라: 교실 물건을 비춰 보세요.');
+    } catch (e) { status('카메라를 켤 수 없어요(권한이 꺼져 있거나 막혀 있어요). "사진 찍어서 하기"로 해 보세요.', true); }
+  }
+  $('startCam').addEventListener('click', startCam);
+  $('flipCam').addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startCam(); });
+  $('pauseCam').addEventListener('click', () => { paused = !paused; $('pauseCam').textContent = paused ? '다시 움직이기' : '멈추기'; status(paused ? '화면을 멈췄어요. 저장되지는 않아요.' : '다시 움직여요.'); });
+  $('photo').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return; const img = new Image();
+    img.onload = () => { still = img; stop(); source = 'photo'; paused = false; $('flipCam').hidden = $('pauseCam').hidden = true; updateSource(); URL.revokeObjectURL(img.src); status('사진으로 대칭을 만들었어요. 사진은 저장되지 않아요.'); };
+    img.src = URL.createObjectURL(f); e.target.value = '';
+  });
+  $('demo').addEventListener('click', () => { stop(); source = 'demo'; paused = false; $('flipCam').hidden = $('pauseCam').hidden = true; drawDemo(960, 720); status('예시 얼굴이에요. 왼쪽과 오른쪽이 조금씩 달라요.'); });
+  drawDemo(960, 720); setMode('left');
+  return { setActive(on) { active = on; if (on && !raf) raf = requestAnimationFrame(frame); if (!on && stream && source === 'camera') { /* 다른 탭에서는 그리기만 멈춤 */ } } };
+})();
+
+/* ================= ② 접기 실험실 ================= */
+const fold = (() => {
+  const cv = $('foldCanvas'), g = cv.getContext('2d'), K = 2; // 논리 400 → 실제 800
+  const heart = (() => { const pts = []; for (let i = 0; i < 64; i++) { const t = i / 64 * Math.PI * 2; const x = 16 * Math.pow(Math.sin(t), 3), y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); pts.push(P(200 + x * 8.4, 190 - y * 8.4)); } return pts; })();
+  const SHAPES = [
+    { id: '가', name: '하트', pts: heart, lines: [[P(200, 40), P(200, 360)], [P(40, 175), P(360, 175)]] },
+    { id: '나', name: '직사각형', pts: [P(70, 120), P(330, 120), P(330, 280), P(70, 280)], lines: [[P(70, 120), P(330, 280)], [P(200, 60), P(200, 340)], [P(40, 200), P(360, 200)]] },
+    { id: '다', name: '평행사변형', pts: [P(60, 280), P(250, 280), P(340, 120), P(150, 120)], lines: [[P(200, 60), P(200, 340)], [P(40, 200), P(360, 200)], [P(60, 280), P(340, 120)]] },
+    { id: '라', name: '이등변삼각형', pts: [P(90, 90), P(330, 200), P(90, 310)], lines: [[P(210, 60), P(210, 340)], [P(50, 200), P(360, 200)], [P(90, 90), P(210, 255)]] },
+    { id: '마', name: 'Z 모양', pts: [P(90, 90), P(250, 90), P(250, 170), P(310, 170), P(310, 310), P(150, 310), P(150, 230), P(90, 230)], lines: [[P(200, 50), P(200, 350)], [P(40, 200), P(360, 200)], [P(90, 90), P(310, 310)], [P(90, 310), P(310, 90)]] },
+    { id: '바', name: '마름모', pts: [P(60, 200), P(200, 100), P(340, 200), P(200, 300)], lines: [[P(130, 150), P(270, 250)], [P(40, 200), P(360, 200)], [P(200, 60), P(200, 340)]] }
+  ];
+  SHAPES.forEach(s => { s.ok = s.lines.map(l => foldMismatch(s.pts, lineFrame(l[0], l[1])) < 0.02); s.sym = s.ok.some(Boolean); });
+  const LINE_NAMES = ['①', '②', '③', '④'];
+  const SHEET_SHAPES = ['나', '다', '마'];
+  let idx = 0, state = SHAPES.map(() => ({ pred: null, tried: {}, done: false })), anim = null, shown = null; // shown: {li, t}
+  function reset() { idx = 0; state = SHAPES.map(() => ({ pred: null, tried: {}, done: false })); shown = null; render(); }
+
+  function drawShape(gg, pts, fill, stroke) { polyPath(gg, pts); gg.fillStyle = fill; gg.fill(); if (stroke) { gg.lineWidth = 3; gg.strokeStyle = stroke; gg.stroke(); } }
+  function draw() {
+    const s = SHAPES[idx], st = state[idx];
+    g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = C.panel2; g.fillRect(0, 0, 800, 800);
+    g.setTransform(K, 0, 0, K, 0, 0);
+    // 모눈
+    g.strokeStyle = 'rgba(255,255,255,.05)'; g.lineWidth = 1; for (let v = 0; v <= 400; v += 20) { g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 400); g.moveTo(0, v); g.lineTo(400, v); g.stroke(); }
+    if (!shown) { drawShape(g, s.pts, C.paper, '#dfe9ff'); }
+    else {
+      const fr = lineFrame(...s.lines[shown.li]), t = shown.t, c = Math.cos(Math.PI * t);
+      // 고정된 쪽(+)
+      g.save(); halfPlanePath(g, fr, 1); g.clip(); drawShape(g, s.pts, C.paper, '#dfe9ff'); g.restore();
+      // 접히는 쪽(-)
+      g.save(); g.transform(...foldMatrix(fr, c));
+      halfPlanePath(g, fr, -1); g.clip(); drawShape(g, s.pts, c >= 0 ? C.paper : C.paper2, '#dfe9ff');
+      g.restore();
+      if (t >= 1) { // 어긋난 부분 표시
+        const off = document.createElement('canvas'); off.width = off.height = 800; const o = off.getContext('2d'); o.setTransform(K, 0, 0, K, 0, 0);
+        o.save(); halfPlanePath(o, fr, 1); o.clip(); o.fillStyle = C.miss; polyPath(o, s.pts); o.fill();
+        o.globalCompositeOperation = 'xor'; o.transform(...foldMatrix(fr, -1)); polyPath(o, s.pts); o.fill(); o.restore();
+        g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = .9; g.drawImage(off, 0, 0); g.restore();
+        if (s.ok[shown.li]) { polyPath(g, s.pts); g.lineWidth = 5; g.strokeStyle = C.pick; g.stroke(); }
+      }
+    }
+    // 접는 선 후보
+    if (st.pred !== null) s.lines.forEach((l, i) => {
+      const on = shown && shown.li === i; const tr = st.tried[i];
+      g.save(); g.setLineDash(on ? [] : [10, 8]); g.lineWidth = on ? 4 : 3;
+      g.strokeStyle = on ? C.axis : tr === true ? C.pick : tr === false ? C.miss : 'rgba(255,210,63,.7)';
+      g.beginPath(); g.moveTo(l[0].x, l[0].y); g.lineTo(l[1].x, l[1].y); g.stroke(); g.setLineDash([]);
+      g.fillStyle = g.strokeStyle; g.font = '700 22px ' + css('--font-body'); g.textAlign = 'center'; g.textBaseline = 'middle';
+      const e = l[1]; g.fillText(LINE_NAMES[i], Math.min(385, Math.max(15, e.x + (e.x > 200 ? -2 : 2))), Math.min(388, Math.max(14, e.y + (e.y > 300 ? 8 : -2)))); g.restore();
+    });
+  }
+  function msg(t, cls) { const m = $('foldMsg'); m.textContent = t; m.className = 'msg ' + (cls || ''); }
+  function render() {
+    const s = SHAPES[idx], st = state[idx], allDone = state.every(x => x.done);
+    const chips = $('foldChips'); chips.innerHTML = '';
+    SHAPES.forEach((sh, i) => {
+      const b = document.createElement('button'); b.className = 'chip'; b.textContent = sh.id;
+      if (state[i].done) b.classList.add(sh.sym ? 'done-yes' : 'done-no');
+      b.setAttribute('aria-current', String(i === idx && !allDone)); b.setAttribute('aria-label', '도형 ' + sh.id);
+      b.disabled = !(state[i].done || i === firstOpen()); b.addEventListener('click', () => { idx = i; shown = null; render(); });
+      chips.appendChild(b);
+    });
+    $('foldQ').textContent = '도형 ' + s.id + ': ' + s.name;
+    $('predictBox').hidden = st.pred !== null || allDone;
+    $('tryBox').hidden = st.pred === null || allDone;
+    $('sortBox').hidden = !allDone;
+    const lb = $('lineBtns'); lb.innerHTML = '';
+    s.lines.forEach((l, i) => {
+      const b = document.createElement('button'); b.className = 'linebtn'; b.textContent = LINE_NAMES[i] + ' 선으로 접기';
+      if (st.tried[i] === true) b.classList.add('tried-yes'); if (st.tried[i] === false) b.classList.add('tried-no');
+      b.addEventListener('click', () => doFold(i)); lb.appendChild(b);
+    });
+    const triedAll = s.lines.every((_, i) => i in st.tried), found = Object.values(st.tried).some(v => v);
+    $('nextShape').disabled = !(found || triedAll);
+    $('nextShape').textContent = state.filter(x => x.done).length >= SHAPES.length - 1 && !st.done ? '결과 나누어 보기' : '다음 도형';
+    if (allDone) renderSort();
+    draw();
+  }
+  function firstOpen() { const i = state.findIndex(x => !x.done); return i < 0 ? SHAPES.length - 1 : i; }
+  function doFold(i) {
+    if (anim) return; const s = SHAPES[idx], st = state[idx];
+    const finish = () => {
+      anim = null; shown = { li: i, t: 1 }; st.tried[i] = s.ok[i];
+      const triedAll = s.lines.every((_, k) => k in st.tried);
+      if (s.ok[i]) msg('완전히 겹쳐요! ' + LINE_NAMES[i] + ' 선을 따라 접으면 양쪽이 꼭 맞아요.', 'good');
+      else if (s.name === '평행사변형') msg('둘로 똑같이 나뉠 것 같았는데, 접으니 빨간 부분이 삐져나와요!', 'bad');
+      else if (s.name === '직사각형' && i === 0) msg('대각선으로 접으면 빨간 부분이 삐져나와요. 다른 선도 접어 볼까요?', 'bad');
+      else msg(triedAll ? '어느 선으로 접어도 완전히 겹치지 않아요.' : '빨간 부분이 삐져나와요. 다른 선으로도 접어 볼까요?', 'bad');
+      render();
+    };
+    if (reduceMotion) { finish(); return; }
+    const t0 = performance.now(), D = 1100;
+    const step = now => { const t = Math.min(1, (now - t0) / D); shown = { li: i, t: easeInOut(t) }; draw(); if (t < 1) anim = requestAnimationFrame(step); else finish(); };
+    msg('접는 중…', ''); anim = requestAnimationFrame(step);
+  }
+  function predict(v) {
+    state[idx].pred = v; shown = null; msg(''); render();
+    if (SHEET_SHAPES.includes(SHAPES[idx].id)) sheet(2, '도형 ' + SHAPES[idx].id + '(' + SHAPES[idx].name + '): 활동지 2번에 예상한 까닭을 쓰고, 그림에 접힐 것 같은 선을 그어 보세요.');
+  }
+  $('predYes').addEventListener('click', () => predict(true));
+  $('predNo').addEventListener('click', () => predict(false));
+  $('nextShape').addEventListener('click', () => {
+    const go = () => {
+      state[idx].done = true; shown = null; msg('');
+      const next = state.findIndex(x => !x.done); if (next >= 0) idx = next; render();
+      if (next < 0) sheet(2, '활동지 2번 아래 질문에 답하세요: 예상과 결과가 달랐던 도형은 무엇이고, 왜 달랐나요?');
+    };
+    if (SHAPES[idx].id === '다') checkpoint('foldMid', go); else go();
+  });
+  function thumb(s) {
+    const c = document.createElement('canvas'); c.width = c.height = 144; const t = c.getContext('2d'); t.setTransform(.36, 0, 0, .36, 0, 0);
+    drawShape(t, s.pts, C.paper); return c;
+  }
+  function renderSort() {
+    const y = $('binYes'), n = $('binNo'); y.innerHTML = n.innerHTML = '';
+    SHAPES.forEach((s, i) => {
+      const d = document.createElement('div'); d.className = 'mini'; d.appendChild(thumb(s));
+      const name = document.createElement('span'); name.textContent = s.id + ' ' + s.name; d.appendChild(name);
+      if (state[i].pred !== s.sym) { const f = document.createElement('span'); f.className = 'flag'; f.textContent = '예상과 달라요'; d.appendChild(f); }
+      (s.sym ? y : n).appendChild(d);
+    });
+  }
+  $('foldAgain').addEventListener('click', reset);
+  $('foldTalk').addEventListener('click', () => talk('완전히 겹치는 도형들에는 어떤 공통점이 있을까요?', '예상과 달랐던 도형도 짝에게 이야기해 보세요. Z 모양은 선을 옮기면 겹칠까요?'));
+  // 도형 위의 선을 직접 눌러도 접힘
+  cv.addEventListener('pointerdown', e => {
+    const s = SHAPES[idx], st = state[idx]; if (st.pred === null || state.every(x => x.done)) return;
+    const pt = canvasPoint(cv, e, 400); let best = -1, bd = 16;
+    s.lines.forEach((l, i) => { const d = distSeg(pt, l[0], l[1]); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) doFold(best);
+  });
+  render();
+  return { draw, SHAPES };
+})();
+
+/* ================= ③ 성질 탐정 ================= */
+const det = (() => {
+  const cv = $('detCanvas'), g = cv.getContext('2d'), K = 2, CM = 40; // 40px = 1cm
+  const LAB = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ'];
+  // 대칭축이 가로(ㄴ과 ㅁ을 지남)인 육각형
+  const MAIN = { pts: [P(150, 105), P(70, 200), P(150, 295), P(290, 275), P(335, 200), P(290, 125)], labels: ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ'], axis: [P(30, 200), P(370, 200)] };
+  // 세로 대칭축(x=200) 도형 모음 (가짜 찾기용)
+  const LIB = [
+    [P(200, 70), P(320, 160), P(290, 320), P(110, 320), P(80, 160)],               // 오각형(집)
+    [P(200, 60), P(300, 170), P(200, 340), P(100, 170)],                            // 연
+    [P(140, 80), P(260, 80), P(330, 200), P(260, 320), P(140, 320), P(70, 200)],    // 육각형
+    [P(130, 100), P(270, 100), P(330, 300), P(70, 300)],                            // 등변사다리꼴
+    [P(110, 90), P(290, 90), P(310, 210), P(200, 330), P(90, 210)],                 // 방패
+    [P(200, 60), P(330, 180), P(270, 320), P(130, 320), P(70, 180)]                 // 넓은 오각형
+  ];
+  function mapPairs(pts, axisX) { // 세로축 x=axisX 기준 대응 꼭짓점
+    return pts.map(p => { let b = -1, bd = 1e9; pts.forEach((q, j) => { const d = Math.hypot(2 * axisX - p.x - q.x, p.y - q.y); if (d < bd) { bd = d; b = j; } }); return b; });
+  }
+  const mainMap = [2, 1, 0, 5, 4, 3]; // ㄱ↔ㄷ, ㄴ·ㅁ 제자리, ㄹ↔ㅂ
+  const sideKey = (i, j) => i < j ? i + '-' + j : j + '-' + i;
+  function elementsOf(pts, map) {
+    const n = pts.length, sides = [], angles = [], points = [];
+    for (let i = 0; i < n; i++) {
+      points.push({ kind: 'pt', i, key: 'p' + i, mate: map[i] === i ? null : 'p' + map[i] });
+      const j = (i + 1) % n, mi = map[i], mj = map[j];
+      sides.push({ kind: 'side', i, j, key: 's' + sideKey(i, j), mate: sideKey(mi, mj) === sideKey(i, j) ? null : 's' + sideKey(mi, mj) });
+      angles.push({ kind: 'ang', i, key: 'a' + i, mate: map[i] === i ? null : 'a' + map[i] });
+    }
+    return { points, sides, angles, all: [...points, ...sides, ...angles] };
+  }
+  const sideLen = (pts, e) => len(sub(pts[e.i], pts[e.j])) / CM;
+  const fmtLen = v => v.toFixed(1) + ' cm', fmtAng = v => Math.round(v) + '°';
+  function valueOf(pts, e) { return e.kind === 'side' ? fmtLen(sideLen(pts, e)) : fmtAng(angleAt(pts, e.i)); }
+  const nameOf = (labels, e) => e.kind === 'pt' ? '점 ' + labels[e.i] : e.kind === 'side' ? '변 ' + labels[e.i] + labels[e.j] : '각 ' + labels[(e.i - 1 + labels.length) % labels.length] + labels[e.i] + labels[(e.i + 1) % labels.length];
+
+  // ----- 상태 -----
+  let missionDone = false, sheet4Done = false, step = 1, kind = 'pt', sel = null, matched = {}, colorOf = {}, measured = {}, foldT = 0;
+  let round = 0, cards = [], cardSel = 0, phase = 'pick', cardMeasured = {}, challenge = null;
+  const mainEl = elementsOf(MAIN.pts, mainMap);
+  const NEED = mainEl.all.filter(e => e.mate && e.kind !== 'side' || (e.kind === 'side' && e.mate));
+  const needPairs = () => { const seen = new Set(); return NEED.filter(e => { const k = [e.key, e.mate].sort().join('|'); if (seen.has(k)) return false; seen.add(k); return true; }); };
+  const PAIRS = needPairs(); // 점 2, 변 3, 각 2 = 7쌍
+
+  function msg(t, cls) { $('detMsg').textContent = t; $('detMsg').className = 'msg ' + (cls || ''); }
+  function setKinds(list) {
+    const k = $('detKind'); k.innerHTML = '';
+    list.forEach(([v, label]) => { const b = document.createElement('button'); b.textContent = label; b.setAttribute('aria-pressed', String(kind === v)); b.addEventListener('click', () => { kind = v; sel = null; setKinds(list); draw(); }); k.appendChild(b); });
+  }
+  function actions(list) { const a = $('detActions'); a.innerHTML = ''; list.forEach(b => a.appendChild(b)); }
+  function btn(t, f, cls) { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.addEventListener('click', f); return b; }
+
+  // ----- 그리기 -----
+  function drawFigure(gg, pts, labels, opts) {
+    const o = opts || {};
+    polyPath(gg, pts); gg.fillStyle = o.fill || 'rgba(143,184,255,.22)'; gg.fill(); gg.lineWidth = 3; gg.strokeStyle = '#dfe9ff'; gg.stroke();
+    // 색칠된 변·각·점
+    (o.colored || []).forEach(([e, col]) => {
+      gg.save(); gg.strokeStyle = gg.fillStyle = col;
+      if (e.kind === 'side') { gg.lineWidth = 9; gg.beginPath(); gg.moveTo(pts[e.i].x, pts[e.i].y); gg.lineTo(pts[e.j].x, pts[e.j].y); gg.stroke(); }
+      if (e.kind === 'ang') { arc(gg, pts, e.i, 30); gg.globalAlpha = .55; gg.fill(); }
+      if (e.kind === 'pt') { gg.beginPath(); gg.arc(pts[e.i].x, pts[e.i].y, 11, 0, Math.PI * 2); gg.fill(); }
+      gg.restore();
+    });
+    if (o.axis) { gg.save(); gg.setLineDash([10, 8]); gg.strokeStyle = C.axis; gg.lineWidth = 3; gg.beginPath(); gg.moveTo(o.axis[0].x, o.axis[0].y); gg.lineTo(o.axis[1].x, o.axis[1].y); gg.stroke(); gg.restore(); }
+    pts.forEach(p => { gg.beginPath(); gg.arc(p.x, p.y, 5, 0, Math.PI * 2); gg.fillStyle = '#fff'; gg.fill(); });
+    if (labels) { // 꼭짓점 이름(도형 바깥쪽)
+      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      gg.font = '700 22px ' + css('--font-body'); gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = C.ink;
+      pts.forEach((p, i) => { const d = len(sub(p, P(cx, cy))) || 1; gg.fillText(labels[i], p.x + (p.x - cx) / d * 22, p.y + (p.y - cy) / d * 22); });
+    }
+    // 잰 값
+    (o.values || []).forEach(([e, text, col]) => {
+      let x, y;
+      if (e.kind === 'side') { x = (pts[e.i].x + pts[e.j].x) / 2; y = (pts[e.i].y + pts[e.j].y) / 2; const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length; const d = len(sub(P(x, y), P(cx, cy))) || 1; x += (x - cx) / d * 26; y += (y - cy) / d * 26; }
+      else { const n = pts.length, a = pts[(e.i - 1 + n) % n], b = pts[(e.i + 1) % n], v = pts[e.i]; const m = { x: (sub(a, v).x / len(sub(a, v)) + sub(b, v).x / len(sub(b, v))), y: (sub(a, v).y / len(sub(a, v)) + sub(b, v).y / len(sub(b, v))) }; const L = len(m) || 1; x = v.x + m.x / L * 50; y = v.y + m.y / L * 50; }
+      gg.font = '700 17px ' + css('--font-body'); const w = gg.measureText(text).width + 12;
+      gg.fillStyle = 'rgba(20,22,29,.85)'; gg.fillRect(x - w / 2, y - 13, w, 26); gg.fillStyle = col || C.axis; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(text, x, y);
+    });
+    if (o.selected) { const e = o.selected; gg.save(); gg.strokeStyle = gg.fillStyle = '#fff'; gg.setLineDash([4, 4]); gg.lineWidth = 3;
+      if (e.kind === 'pt') { gg.beginPath(); gg.arc(pts[e.i].x, pts[e.i].y, 16, 0, Math.PI * 2); gg.stroke(); }
+      if (e.kind === 'side') { gg.lineWidth = 12; gg.globalAlpha = .5; gg.setLineDash([]); gg.beginPath(); gg.moveTo(pts[e.i].x, pts[e.i].y); gg.lineTo(pts[e.j].x, pts[e.j].y); gg.stroke(); }
+      if (e.kind === 'ang') { arc(gg, pts, e.i, 30); gg.globalAlpha = .4; gg.fill(); }
+      gg.restore(); }
+  }
+  function arc(gg, pts, i, r) {
+    const n = pts.length, v = pts[i], a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
+    let a1 = Math.atan2(a.y - v.y, a.x - v.x), a2 = Math.atan2(b.y - v.y, b.x - v.x);
+    let d = a2 - a1; while (d <= -Math.PI) d += 2 * Math.PI; while (d > Math.PI) d -= 2 * Math.PI;
+    gg.beginPath(); gg.moveTo(v.x, v.y); gg.arc(v.x, v.y, r, a1, a1 + d, d < 0); gg.closePath();
+  }
+  function hit(pts, el, pt, k) {
+    if (k === 'pt') { let b = null, bd = 26; el.points.forEach(e => { const d = len(sub(pt, pts[e.i])); if (d < bd) { bd = d; b = e; } }); return b; }
+    if (k === 'side') { let b = null, bd = 22; el.sides.forEach(e => { const d = distSeg(pt, pts[e.i], pts[e.j]); if (d < bd) { bd = d; b = e; } }); return b; }
+    if (k === 'ang') { let b = null, bd = 60; el.angles.forEach(e => { const d = len(sub(pt, pts[e.i])); if (d < bd && (inPoly(pt, pts) || d < 18)) { bd = d; b = e; } }); return b; }
+    return null;
+  }
+  function draw() {
+    if (step === 4) { drawChallenge(); return; }
+    g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = C.panel2; g.fillRect(0, 0, 800, 800); g.setTransform(K, 0, 0, K, 0, 0);
+    if (step <= 2) {
+      const colored = Object.entries(colorOf).map(([key, col]) => [mainEl.all.find(e => e.key === key), col]);
+      const values = step === 2 ? Object.keys(measured).map(key => { const e = mainEl.all.find(x => x.key === key); return [e, valueOf(MAIN.pts, e)]; }) : [];
+      if (foldT > 0) { // 대칭축으로 접어 보여 주기(1단계 도움)
+        const fr = lineFrame(...MAIN.axis), c = Math.cos(Math.PI * foldT);
+        g.save(); halfPlanePath(g, fr, 1); g.clip(); drawFigure(g, MAIN.pts, null, { colored }); g.restore();
+        g.save(); g.transform(...foldMatrix(fr, c)); halfPlanePath(g, fr, -1); g.clip(); drawFigure(g, MAIN.pts, null, { colored, fill: c < 0 ? 'rgba(79,111,179,.6)' : undefined }); g.restore();
+      } else drawFigure(g, MAIN.pts, MAIN.labels, { axis: MAIN.axis, colored, values, selected: sel });
+    } else if (missionDone && !challenge) {
+      g.fillStyle = C.ink; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '400 40px ' + css('--font-display'); g.fillText('탐정 임무 완료!', 200, 170);
+      g.font = '400 18px ' + css('--font-body'); g.fillStyle = C.muted; g.fillText('대응변의 길이와 대응각의 크기를', 200, 225); g.fillText('모두 확인해야 진짜를 가릴 수 있어요.', 200, 252);
+    } else drawCard(g, cards[cardSel], true);
+  }
+  function drawCard(gg, card, big) {
+    if (!card) return;
+    const values = big ? Object.keys(cardMeasured).filter(k => k.startsWith(cardSel + ':')).map(k => { const key = k.split(':')[1]; const e = card.el.all.find(x => x.key === key); const mate = e.mate && cardMeasured[cardSel + ':' + e.mate]; let col = C.axis; if (mate) col = valueOf(card.pts, e) === valueOf(card.pts, card.el.all.find(x => x.key === e.mate)) ? C.pick : C.miss; return [e, valueOf(card.pts, e), col]; }) : [];
+    drawFigure(gg, card.pts, big ? card.labels : null, { axis: [P(200, 30), P(200, 370)], values, selected: big ? sel : null });
+  }
+
+  // ----- 단계 구성 -----
+  function stepper() {
+    $('measBox').hidden = $('stmtBox').hidden = $('cardBox').hidden = true;
+    if (step === 1) {
+      $('detStep').textContent = '1단계 · 짝 찾기';
+      $('detQ').textContent = '노란 점선(대칭축)으로 접었을 때 서로 겹치는 점, 변, 각을 짝지어 누르세요.';
+      setKinds([['pt', '점'], ['side', '변'], ['ang', '각']]);
+      $('detProg').textContent = Object.keys(matched).length / 2 + ' / ' + PAIRS.length + '쌍';
+      actions([btn('대칭축으로 접어서 보기', showFold)]);
+    }
+    if (step === 2) {
+      $('detStep').textContent = '2단계 · 재어 보기';
+      $('detQ').textContent = '변을 누르면 길이를, 각을 누르면 크기를 잴 수 있어요. 대응변과 대응각을 모두 재어 표를 채워 보세요.';
+      setKinds([['side', '변 길이 재기'], ['ang', '각 크기 재기']]);
+      $('measBox').hidden = false; renderTable();
+      const filled = PAIRS.filter(p => p.kind !== 'pt').every(p => measured[p.key] && measured[p.mate]);
+      $('detProg').textContent = PAIRS.filter(p => p.kind !== 'pt' && measured[p.key] && measured[p.mate]).length + ' / 5쌍';
+      $('stmtBox').hidden = !filled; actions([]);
+    }
+    if (step === 3) {
+      $('detStep').textContent = challenge ? '도전 · 짝이 만든 가짜 찾기' : '3단계 · 가짜 선대칭도형을 찾아라 (' + (round + 1) + ' / 3)';
+      $('detQ').textContent = phase === 'pick' ? '세 카드 모두 노란 선이 대칭축이라고 주장해요. 하나는 가짜예요! 카드를 눌러 크게 보고, 변과 각을 재어 증거를 찾으세요. (이번에는 접지 않아요.)'
+        : '증거를 보여 주세요: 가짜 카드에서 길이나 크기가 서로 다른 대응변 또는 대응각을 누르세요.';
+      setKinds([['side', '변 길이 재기'], ['ang', '각 크기 재기']]);
+      $('cardBox').hidden = false; renderCards(); $('detProg').textContent = '';
+      actions(phase === 'pick' ? [btn('이 카드가 가짜!', accuse, 'primary')] : [btn('카드 다시 고르기', () => { phase = 'pick'; msg(''); stepper(); })]);
+    }
+    if (step === 4) { // 도전: 가짜 만들기
+      $('detStep').textContent = '도전 · 짝을 속일 가짜 만들기';
+      $('detQ').textContent = '꼭짓점 하나를 살짝 끌어서 가짜 선대칭도형을 만들어 보세요. 너무 티 나지 않게!';
+      $('detKind').innerHTML = ''; $('detProg').textContent = '';
+      actions([btn('다른 도형', () => { challenge.base = (challenge.base + 1) % LIB.length; challenge.pts = LIB[challenge.base].map(p => P(p.x, p.y)); challenge.moved = null; draw(); }),
+        btn('다 만들었어요', finishChallenge, 'primary')]);
+    }
+    draw();
+  }
+  // 표의 이름은 활동지 4번과 똑같이 맞춘다
+  const TABLE_ROWS = [['변 ㄱㄴ · ㄷㄴ', 's0-1', 's1-2'], ['변 ㄱㅂ · ㄷㄹ', 's0-5', 's2-3'], ['변 ㅂㅁ · ㄹㅁ', 's4-5', 's3-4'], ['각 ㄴㄱㅂ · ㄴㄷㄹ', 'a0', 'a2'], ['각 ㄱㅂㅁ · ㄷㄹㅁ', 'a5', 'a3']];
+  function renderTable() {
+    const t = $('measTable'); t.innerHTML = '<tr><th>대응변·대응각</th><th>하나</th><th>다른 하나</th></tr>';
+    TABLE_ROWS.forEach(([label, ka, kb]) => {
+      const a = mainEl.all.find(e => e.key === ka), b = mainEl.all.find(e => e.key === kb);
+      const va = measured[ka] ? valueOf(MAIN.pts, a) : '?', vb = measured[kb] ? valueOf(MAIN.pts, b) : '?';
+      const same = va !== '?' && va === vb ? ' class="same"' : '';
+      t.insertAdjacentHTML('beforeend', '<tr><td>' + label + '</td><td' + same + '>' + va + '</td><td' + same + '>' + vb + '</td></tr>');
+    });
+  }
+  const STMTS = [['대응변의 길이가 서로 같다.', true], ['모든 변의 길이가 같다.', false], ['대응각의 크기가 서로 같다.', true], ['모든 각의 크기가 같다.', false], ['대칭축 위쪽 변이 아래쪽 변보다 길다.', false]];
+  let stmtPick = {};
+  function renderStmts() {
+    const s = $('stmts'); s.innerHTML = '';
+    STMTS.forEach(([t], i) => { const b = document.createElement('button'); b.className = 'stmt'; b.textContent = t; b.setAttribute('aria-pressed', String(!!stmtPick[i])); b.addEventListener('click', () => { stmtPick[i] = !stmtPick[i]; renderStmts(); }); s.appendChild(b); });
+  }
+  $('stmtCheck').addEventListener('click', () => {
+    const ok = STMTS.every(([, v], i) => !!stmtPick[i] === v);
+    if (ok) { msg('성질을 찾았어요! 선대칭도형은 대응변의 길이와 대응각의 크기가 각각 같아요.', 'good');
+      sheet(4, '활동지 4번 아래 성질 문장의 빈칸을 채우세요.', () => checkpoint('detMid', () => { step = 3; round = 0; newRound(); })); }
+    else { const wrongPick = STMTS.some(([, v], i) => stmtPick[i] && !v); msg(wrongPick ? '표를 다시 볼까요? 모든 변이 같은지, 대응변끼리만 같은지 확인해 보세요.' : '맞는 것을 하나 더 찾아보세요.', 'warn'); }
+  });
+
+  function showFold() {
+    if (reduceMotion) { foldT = 1; draw(); setTimeout(() => { foldT = 0; draw(); }, 1500); return; }
+    const t0 = performance.now();
+    const f = now => { const t = (now - t0) / 1000; foldT = t < 1 ? easeInOut(t) : t < 2 ? 1 : t < 3 ? easeInOut(3 - t) : 0; draw(); if (t < 3) requestAnimationFrame(f); else { foldT = 0; draw(); } };
+    requestAnimationFrame(f);
+  }
+
+  // ----- 가짜 찾기 -----
+  function makeCard(base, fake, level) {
+    const pts = LIB[base].map(p => P(p.x, p.y)), map = mapPairs(pts, 200);
+    if (fake) {
+      const cands = pts.map((p, i) => i).filter(i => map[i] !== i);
+      const i = cands[Math.floor(Math.random() * cands.length)], n = pts.length, nb = pts[(i + 1) % n];
+      if (level === 0) pts[i] = P(pts[i].x + (pts[i].x > 200 ? 30 : -30), pts[i].y + 10);
+      else if (level === 1) pts[i] = P(pts[i].x + (pts[i].x > 200 ? 12 : -12), pts[i].y);
+      else { const th = 8 * Math.PI / 180 * (Math.random() < .5 ? 1 : -1), v = sub(pts[i], nb); pts[i] = P(nb.x + v.x * Math.cos(th) - v.y * Math.sin(th), nb.y + v.x * Math.sin(th) + v.y * Math.cos(th)); }
+    }
+    return { pts, fake, el: elementsOf(pts, map), labels: LAB.slice(0, pts.length) };
+  }
+  // 라운드가 갈수록 기울기를 줄여 대응각 차이가 작아짐(약 12° → 8° → 5° 차이)
+  const SHEAR_DEG = [6, 4, 2.5];
+  function rectCard(deg) {
+    const w = 170 + Math.round(Math.random() * 60), h = 160 + Math.round(Math.random() * 60);
+    const x0 = 200 - w / 2, y0 = 200 - h / 2;
+    const base = [P(x0, y0), P(x0 + w, y0), P(x0 + w, y0 + h), P(x0, y0 + h)];
+    const map = mapPairs(base, 200);
+    const d = deg ? h * Math.tan(deg * Math.PI / 180) * (Math.random() < .5 ? 1 : -1) : 0;
+    const pts = base.map((q, i) => i < 2 ? P(q.x + d / 2, q.y) : P(q.x - d / 2, q.y)); // 윗변은 한쪽, 아랫변은 반대쪽으로 밀기
+    return { pts, fake: !!deg, el: elementsOf(pts, map), labels: LAB.slice(0, 4) };
+  }
+  function newRound(custom) {
+    phase = 'pick'; cardSel = 0; cardMeasured = {}; sel = null; missionDone = false;
+    msg(custom ? '짝이 만든 가짜를 찾아보세요!' : round === 0 ? '' : '라운드 ' + (round + 1) + ' 시작! 새 카드예요. 이번 가짜는 더 진짜 같으니 꼼꼼히 재어 보세요.', round === 0 && !custom ? '' : 'warn');
+    const cb = $('cardBox'); cb.classList.remove('fresh'); void cb.offsetWidth; cb.classList.add('fresh');
+    const bases = [...Array(LIB.length).keys()].sort(() => Math.random() - .5);
+    if (custom) {
+      const fakeCard = { pts: custom.pts, fake: true, el: elementsOf(custom.pts, mapPairs(LIB[custom.base], 200)), labels: LAB.slice(0, custom.pts.length) };
+      const others = bases.filter(b => b !== custom.base).slice(0, 2).map(b => makeCard(b, false));
+      cards = [fakeCard, ...others].sort(() => Math.random() - .5);
+    } else {
+      // 가짜: 직사각형처럼 보이는 평행사변형(변의 길이는 대응변끼리 모두 같고, 대응각만 조금 다름)
+      // 진짜: 진짜 직사각형 1장 + 다른 선대칭도형 1장
+      cards = [rectCard(SHEAR_DEG[round]), rectCard(0), makeCard(bases[0], false)].sort(() => Math.random() - .5);
+    }
+    stepper();
+  }
+  function renderCards() {
+    const box = $('cards'); box.innerHTML = '';
+    cards.forEach((c, i) => {
+      const b = document.createElement('button'); b.className = 'card'; b.setAttribute('aria-pressed', String(i === cardSel)); b.setAttribute('aria-label', '카드 ' + '가나다'[i]);
+      const cc = document.createElement('canvas'); cc.width = cc.height = 240; const t = cc.getContext('2d'); t.fillStyle = C.stage; t.fillRect(0, 0, 240, 240); t.setTransform(.6, 0, 0, .6, 0, 0); drawCard(t, c, false);
+      const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = '카드 ' + '가나다'[i];
+      b.append(cc, nm); b.addEventListener('click', () => { cardSel = i; sel = null; if (phase === 'evidence') { phase = 'pick'; msg(''); } stepper(); }); box.appendChild(b);
+    });
+  }
+  function accuse() {
+    const c = cards[cardSel];
+    if (!c.fake) { msg('이 카드의 대응변과 대응각을 모두 재어 볼까요? 모두 같다면 진짜 선대칭도형이에요.', 'warn'); return; }
+    phase = 'evidence'; msg('좋아요! 이제 증거를 보여 주세요.', ''); stepper(); if (!challenge) sheet(5, '라운드 ' + (round + 1) + ': 활동지 5번에 가짜 카드와 증거 문장을 먼저 쓰세요. 그다음 앱에서 증거를 누르세요.');
+  }
+  function checkEvidence(e) {
+    const c = cards[cardSel]; if (!e.mate) { msg('대칭축 위의 변과 각은 짝이 자기 자신이에요. 다른 곳을 찾아보세요.', 'warn'); return; }
+    const m = c.el.all.find(x => x.key === e.mate);
+    cardMeasured[cardSel + ':' + e.key] = true; cardMeasured[cardSel + ':' + m.key] = true; draw();
+    if (valueOf(c.pts, e) !== valueOf(c.pts, m)) {
+      msg('증거 발견! ' + nameOf(c.labels, e) + '(' + valueOf(c.pts, e) + ')과 ' + nameOf(c.labels, m) + '(' + valueOf(c.pts, m) + ')이 달라요. 대응' + (e.kind === 'side' ? '변의 길이' : '각의 크기') + '가 같지 않으니 선대칭도형이 아니에요.', 'good');
+      const next = () => {
+        if (challenge) { challenge = null; step = 4; startChallenge(); return; }
+        round++; if (round < 3) newRound();
+        else { missionDone = true; draw(); msg('세 라운드를 모두 해결했어요!', 'good'); actions([btn('도전: 짝을 속일 가짜 만들기', startChallenge, 'primary')]); $('detQ').textContent = '탐정 임무 완료! 빨리 끝냈다면 도전 문제에 참여해 보세요.'; $('cardBox').hidden = true; }
+      };
+      setTimeout(() => {
+        talk('짝에게 증거를 설명해 보세요.', '"' + nameOf(c.labels, e) + '과 ' + nameOf(c.labels, m) + '은 대응' + (e.kind === 'side' ? '변인데 길이가' : '각인데 크기가') + ' 달라서 가짜예요."처럼 말해요.', next);
+        $('talkDone').textContent = challenge ? '다음 가짜 만들기' : round < 2 ? '라운드 ' + (round + 2) + (round === 0 ? '로' : '으로') + ' 넘어가기' : '탐정 임무 마치기';
+      }, 900);
+    } else msg(nameOf(c.labels, e) + '과 ' + nameOf(c.labels, m) + '은 ' + valueOf(c.pts, e) + '로 같아요. 다른 대응변이나 대응각을 재어 보세요.', 'warn');
+  }
+
+  // ----- 도전: 가짜 만들기 -----
+  let dragI = -1;
+  function startChallenge() { step = 4; challenge = { base: Math.floor(Math.random() * LIB.length), moved: null }; challenge.pts = LIB[challenge.base].map(p => P(p.x, p.y)); msg(''); stepper(); }
+  function finishChallenge() {
+    const orig = LIB[challenge.base], d = challenge.pts.reduce((m, p, i) => Math.max(m, len(sub(p, orig[i]))), 0);
+    if (d < 6) { msg('꼭짓점을 조금 더 움직여야 가짜가 돼요.', 'warn'); return; }
+    const c = { base: challenge.base, pts: challenge.pts.map(p => P(p.x, p.y)) };
+    talk('이제 디벗을 짝에게 건네주세요.', '짝이 세 카드 중 내가 만든 가짜를 찾고, 증거를 보여 줘야 해요.', () => { challenge = { solving: true }; step = 3; newRound(c); });
+  }
+  function drawChallenge() {
+    g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = C.panel2; g.fillRect(0, 0, 800, 800); g.setTransform(K, 0, 0, K, 0, 0);
+    const pts = challenge.pts, map = mapPairs(LIB[challenge.base], 200);
+    drawFigure(g, pts, null, { axis: [P(200, 30), P(200, 370)] });
+    pts.forEach((p, i) => { if (map[i] === i) return; g.beginPath(); g.arc(p.x, p.y, 14, 0, Math.PI * 2); g.strokeStyle = C.axis; g.lineWidth = 3; g.stroke(); });
+  }
+
+  // ----- 입력 -----
+  cv.addEventListener('pointerdown', e => {
+    const pt = canvasPoint(cv, e, 400);
+    if (step === 4) {
+      const map = mapPairs(LIB[challenge.base], 200); let b = -1, bd = 28;
+      challenge.pts.forEach((p, i) => { if (map[i] === i) return; const d = len(sub(pt, p)); if (d < bd) { bd = d; b = i; } });
+      if (b >= 0) { challenge.pts = LIB[challenge.base].map(p => P(p.x, p.y)); dragI = b; cv.setPointerCapture(e.pointerId); } return;
+    }
+    if (step === 1) {
+      const el = hit(MAIN.pts, mainEl, pt, kind); if (!el) return;
+      if (matched[el.key]) { msg(nameOf(MAIN.labels, el) + '은 이미 짝을 찾았어요.', ''); return; }
+      if (!el.mate) { msg(nameOf(MAIN.labels, el) + '은 대칭축 위에 있어서 접어도 제자리에 있어요. 다른 곳을 골라 보세요.', 'warn'); sel = null; draw(); return; }
+      if (!sel || sel.kind !== el.kind) { sel = el; msg(nameOf(MAIN.labels, el) + '을 골랐어요. 접었을 때 겹치는 짝을 누르세요.', ''); draw(); return; }
+      if (sel.key === el.key) { sel = null; msg(''); draw(); return; }
+      if (sel.mate === el.key) {
+        const col = PAIR_COLORS[Object.keys(matched).length / 2 % PAIR_COLORS.length];
+        matched[sel.key] = matched[el.key] = true; colorOf[sel.key] = colorOf[el.key] = col;
+        const word = { pt: '대응점', side: '대응변', ang: '대응각' }[el.kind];
+        msg('맞아요! ' + nameOf(MAIN.labels, sel) + '과 ' + nameOf(MAIN.labels, el) + '은 ' + word + '이에요.', 'good'); sel = null;
+        if (Object.keys(matched).length / 2 >= PAIRS.length) {
+          setTimeout(() => talk('짝을 모두 찾았어요! 어떻게 찾았는지 짝에게 말해 보세요.', '대응변과 대응각을 읽을 때는 대응점의 순서대로 읽어요.', () => { step = 2; kind = 'side'; colorOf = {}; msg(''); stepper(); }), 700);
+        }
+      } else { msg('대칭축으로 접었을 때 ' + nameOf(MAIN.labels, sel) + '과 겹치지 않아요. "대칭축으로 접어서 보기"를 눌러 확인해 보세요.', 'bad'); sel = null; }
+      stepper(); return;
+    }
+    if (step === 2) {
+      const el = hit(MAIN.pts, mainEl, pt, kind); if (!el) return;
+      measured[el.key] = true; msg(nameOf(MAIN.labels, el) + ': ' + valueOf(MAIN.pts, el), '');
+      if (PAIRS.filter(p => p.kind !== 'pt').every(p => measured[p.key] && measured[p.mate]) && !sheet4Done) { sheet4Done = true; renderStmts(); msg('표를 다 채웠어요. 표를 보고 성질을 골라 보세요.', 'good'); setTimeout(() => sheet(4, '활동지 4번 표에 잰 값을 옮겨 적고, "같다·다르다"를 써 보세요.'), 300); }
+      stepper(); return;
+    }
+    if (step === 3) {
+      const c = cards[cardSel], el = hit(c.pts, c.el, pt, kind); if (!el) return;
+      if (phase === 'evidence') { checkEvidence(el); return; }
+      cardMeasured[cardSel + ':' + el.key] = true; msg(nameOf(c.labels, el) + ': ' + valueOf(c.pts, el), ''); draw();
+    }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (step !== 4 || dragI < 0) return; const pt = canvasPoint(cv, e, 400), o = LIB[challenge.base][dragI];
+    const v = sub(pt, o), L = len(v), R = 40; challenge.pts[dragI] = L > R ? P(o.x + v.x / L * R, o.y + v.y / L * R) : pt; draw();
+  });
+  const endDrag = () => { dragI = -1; }; cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+  stepper();
+  return { draw, _state: () => ({ step, round, phase, cards, matched, measured, challenge }) };
+})();
+window.__symlab = { fold, det };
+refreshTabs();
+})();
+</script>
+</body></html>
